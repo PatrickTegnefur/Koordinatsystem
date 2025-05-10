@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Koordinatsystem Träning</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f8ff;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        
+        .canvas-container {
+            position: relative;
+            margin: 0 auto;
+            width: 600px;
+            height: 600px;
+        }
+        
+        canvas {
+            border: 1px solid #ddd;
+            background-color: white;
+        }
+        
+        .task-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f4fd;
+            border-radius: 8px;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        select {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            font-size: 16px;
+        }
+        
+        .feedback {
+            margin-top: 15px;
+            font-weight: bold;
+            text-align: center;
+            min-height: 24px;
+        }
+        
+        .correct {
+            color: #27ae60;
+        }
+        
+        .incorrect {
+            color: #e74c3c;
+        }
+        
+        .score {
+            text-align: right;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .point-label {
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-size: 12px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Träna Koordinatsystem</h1>
+        
+        <div class="controls">
+            <select id="exercise-type">
+                <option value="place-point">Placera punkter</option>
+                <option value="find-coordinates">Hitta koordinater</option>
+                <option value="calculate-distance">Beräkna avstånd</option>
+            </select>
+            
+            <button id="new-exercise">Ny övning</button>
+        </div>
+        
+        <div class="score">Poäng: <span id="score">0</span></div>
+        
+        <div class="canvas-container">
+            <canvas id="coordinate-system" width="600" height="600"></canvas>
+        </div>
+        
+        <div class="task-panel">
+            <p id="task-description">Välkommen! Välj en övningstyp och klicka på "Ny övning" för att börja.</p>
+            <div id="task-input" style="display: none; margin-top: 10px;">
+                <label for="answer">Ditt svar: </label>
+                <input type="text" id="answer">
+                <button id="check-answer">Kontrollera</button>
+            </div>
+        </div>
+        
+        <div class="feedback" id="feedback"></div>
+    </div>
+
+    <script>
+        // Globala variabler
+        const canvas = document.getElementById('coordinate-system');
+        const ctx = canvas.getContext('2d');
+        const gridSize = 30; // Mindre rutstorlek för att få plats med -10 till 10
+        const originX = canvas.width / 2;
+        const originY = canvas.height / 2;
+        let score = 0;
+        let currentExercise = null;
+        let currentPoints = [];
+        let answerChecked = false;
+        
+        // Initiera sidan
+        drawGrid(-10, 10, -10, 10);
+        
+        // Event listeners
+        document.getElementById('new-exercise').addEventListener('click', createNewExercise);
+        document.getElementById('check-answer').addEventListener('click', function() {
+            if (answerChecked) {
+                createNewExercise();
+            } else {
+                checkAnswer();
+            }
+        });
+        canvas.addEventListener('click', handleCanvasClick);
+        
+        // Rita koordinatsystemet med angivna gränser
+        function drawGrid(minX = -5, maxX = 5, minY = -5, maxY = 5) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Rita rutnät
+            ctx.strokeStyle = '#e6e6e6';
+            ctx.lineWidth = 1;
+            
+            // Vertikala linjer
+            for (let x = minX; x <= maxX; x++) {
+                const canvasX = originX + x * gridSize;
+                ctx.beginPath();
+                ctx.moveTo(canvasX, 0);
+                ctx.lineTo(canvasX, canvas.height);
+                ctx.stroke();
+            }
+            
+            // Horisontella linjer
+            for (let y = minY; y <= maxY; y++) {
+                const canvasY = originY - y * gridSize;
+                ctx.beginPath();
+                ctx.moveTo(0, canvasY);
+                ctx.lineTo(canvas.width, canvasY);
+                ctx.stroke();
+            }
+            
+            // Rita x- och y-axlar
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            
+            // x-axel
+            ctx.beginPath();
+            ctx.moveTo(0, originY);
+            ctx.lineTo(canvas.width, originY);
+            ctx.stroke();
+            
+            // y-axel
+            ctx.beginPath();
+            ctx.moveTo(originX, 0);
+            ctx.lineTo(originX, canvas.height);
+            ctx.stroke();
+            
+            // Rita skalmarkeringar och etiketter
+            ctx.fillStyle = '#000';
+            
+            // x-axelns markeringar
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            
+            for (let x = minX; x <= maxX; x++) {
+                if (x === 0) continue; // Hoppa över origo
+                
+                const canvasX = originX + x * gridSize;
+                ctx.fillText(x, canvasX, originY + 5);
+                
+                ctx.beginPath();
+                ctx.moveTo(canvasX, originY - 5);
+                ctx.lineTo(canvasX, originY + 5);
+                ctx.stroke();
+            }
+            
+            // y-axelns markeringar
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            
+            for (let y = minY; y <= maxY; y++) {
+                if (y === 0) continue; // Hoppa över origo
+                
+                const canvasY = originY - y * gridSize;
+                ctx.fillText(y, originX - 8, canvasY);
+                
+                ctx.beginPath();
+                ctx.moveTo(originX - 5, canvasY);
+                ctx.lineTo(originX + 5, canvasY);
+                ctx.stroke();
+            }
+            
+            // Markera origo med 0,0
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            ctx.fillText("0", originX - 5, originY + 5);
+        }
+        
+        // Rita en punkt
+        function drawPoint(x, y, color = '#e74c3c', radius = 6, label = null) {
+            const canvasX = originX + x * gridSize;
+            const canvasY = originY - y * gridSize;
+            
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(canvasX, canvasY, radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            if (label) {
+                ctx.fillStyle = '#000';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(label, canvasX + 8, canvasY - 8);
+            }
+            
+            return { canvasX, canvasY };
+        }
+        
+        // Skapa en ny övning baserat på vald typ
+        function createNewExercise() {
+            const exerciseType = document.getElementById('exercise-type').value;
+            currentPoints = [];
+            drawGrid(-10, 10, -10, 10);
+            
+            document.getElementById('feedback').textContent = '';
+            document.getElementById('feedback').className = 'feedback';
+            document.getElementById('check-answer').textContent = 'Kontrollera';
+            
+            switch (exerciseType) {
+                case 'place-point':
+                    createPlacePointExercise();
+                    break;
+                case 'find-coordinates':
+                    createFindCoordinatesExercise();
+                    break;
+                case 'calculate-distance':
+                    createCalculateDistanceExercise();
+                    break;
+            }
+        }
+        
+        // Skapa en "placera punkt" övning
+        function createPlacePointExercise() {
+            const x = Math.floor(Math.random() * 20) - 10;
+            const y = Math.floor(Math.random() * 20) - 10;
+            
+            currentExercise = {
+                type: 'place-point',
+                targetX: x,
+                targetY: y
+            };
+            
+            answerChecked = false;
+            document.getElementById('task-description').textContent = `Klicka på punkten (${x}, ${y}) i koordinatsystemet.`;
+            document.getElementById('task-input').style.display = 'none';
+        }
+        
+        // Skapa en "hitta koordinater" övning
+        function createFindCoordinatesExercise() {
+            const x = Math.floor(Math.random() * 20) - 10;
+            const y = Math.floor(Math.random() * 20) - 10;
+            
+            currentExercise = {
+                type: 'find-coordinates',
+                pointX: x,
+                pointY: y
+            };
+            
+            answerChecked = false;
+            drawPoint(x, y, '#3498db', 6, 'A');
+            currentPoints.push({ x, y, label: 'A' });
+            
+            document.getElementById('task-description').textContent = 'Vilka koordinater har punkt A? Ange svaret i formatet (x,y).';
+            document.getElementById('task-input').style.display = 'block';
+            document.getElementById('answer').value = '';
+            document.getElementById('answer').focus();
+        }
+        
+        // Skapa en "beräkna avstånd" övning
+        function createCalculateDistanceExercise() {
+            const x1 = Math.floor(Math.random() * 16) - 8;
+            const y1 = Math.floor(Math.random() * 16) - 8;
+            const x2 = Math.floor(Math.random() * 16) - 8;
+            const y2 = Math.floor(Math.random() * 16) - 8;
+            
+            // Se till att punkterna inte är samma
+            if (x1 === x2 && y1 === y2) {
+                y2 = y2 + 1;
+            }
+            
+            currentExercise = {
+                type: 'calculate-distance',
+                pointAx: x1,
+                pointAy: y1,
+                pointBx: x2,
+                pointBy: y2,
+                distance: Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2))
+            };
+            
+            answerChecked = false;
+            drawPoint(x1, y1, '#3498db', 6, 'A');
+            drawPoint(x2, y2, '#9b59b6', 6, 'B');
+            currentPoints.push({ x: x1, y: y1, label: 'A' });
+            currentPoints.push({ x: x2, y: y2, label: 'B' });
+            
+            // Rita en streckad linje mellan punkterna
+            ctx.setLineDash([5, 3]);
+            ctx.strokeStyle = '#7f8c8d';
+            ctx.beginPath();
+            ctx.moveTo(originX + x1 * gridSize, originY - y1 * gridSize);
+            ctx.lineTo(originX + x2 * gridSize, originY - y2 * gridSize);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            document.getElementById('task-description').textContent = 'Beräkna avståndet mellan punkt A och punkt B. Avrunda ditt svar till två decimaler.';
+            document.getElementById('task-input').style.display = 'block';
+            document.getElementById('answer').value = '';
+            document.getElementById('answer').focus();
+        }
+        
+        // Hantera klick på canvas
+        function handleCanvasClick(event) {
+            if (!currentExercise || currentExercise.type !== 'place-point' || answerChecked) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const clickY = event.clientY - rect.top;
+            
+            // Konvertera till koordinatsystemet
+            const x = Math.round((clickX - originX) / gridSize);
+            const y = Math.round((originY - clickY) / gridSize);
+            
+            // Kontrollera om punkten är korrekt
+            if (x === currentExercise.targetX && y === currentExercise.targetY) {
+                drawPoint(x, y, '#27ae60');
+                showFeedback(true, 'Korrekt! Du placerade punkten på rätt plats.');
+                score++;
+                document.getElementById('score').textContent = score;
+            } else {
+                drawPoint(x, y, '#e74c3c');
+                drawPoint(currentExercise.targetX, currentExercise.targetY, '#27ae60', 6, 'Korrekt');
+                showFeedback(false, `Fel! Du klickade på (${x}, ${y}). Den korrekta punkten är (${currentExercise.targetX}, ${currentExercise.targetY}).`);
+            }
+            
+            // Markera att svaret har kontrollerats och låt användaren gå till nästa övning
+            answerChecked = true;
+            setTimeout(() => {
+                document.getElementById('new-exercise').focus();
+            }, 500);
+        }
+        
+        // Kontrollera svaret för text-inmatningsövningar
+        function checkAnswer() {
+            const answer = document.getElementById('answer').value.trim();
+            const checkButton = document.getElementById('check-answer');
+            
+            if (!currentExercise || answerChecked) return;
+            
+            if (currentExercise.type === 'find-coordinates') {
+                // Parsa koordinatsvaret
+                const coordinatePattern = /\(?(-?\d+)\s*,\s*(-?\d+)\)?/;
+                const match = answer.match(coordinatePattern);
+                
+                if (match) {
+                    const x = parseInt(match[1]);
+                    const y = parseInt(match[2]);
+                    
+                    if (x === currentExercise.pointX && y === currentExercise.pointY) {
+                        showFeedback(true, 'Korrekt! Rätt koordinater för punkten.');
+                        score++;
+                        document.getElementById('score').textContent = score;
+                    } else {
+                        showFeedback(false, `Fel! De korrekta koordinaterna är (${currentExercise.pointX}, ${currentExercise.pointY}).`);
+                    }
+                } else {
+                    showFeedback(false, 'Ogiltig inmatning. Ange koordinaterna i formatet (x,y).');
+                    // Vid ogiltig inmatning ska användaren kunna försöka igen
+                    return;
+                }
+            }
+            else if (currentExercise.type === 'calculate-distance') {
+                // Parsa avståndssvaret och avrunda till två decimaler
+                const userDistance = parseFloat(answer.replace(',', '.'));
+                const correctDistance = Math.round(currentExercise.distance * 100) / 100;
+                
+                if (!isNaN(userDistance)) {
+                    // Tillåt en liten marginal för avrundning
+                    if (Math.abs(userDistance - correctDistance) < 0.01) {
+                        showFeedback(true, `Korrekt! Avståndet är ${correctDistance.toFixed(2)} enheter.`);
+                        score++;
+                        document.getElementById('score').textContent = score;
+                    } else {
+                        showFeedback(false, `Fel! Det korrekta avståndet är ${correctDistance.toFixed(2)} enheter.`);
+                    }
+                } else {
+                    showFeedback(false, 'Ogiltig inmatning. Ange ett numeriskt värde.');
+                    // Vid ogiltig inmatning ska användaren kunna försöka igen
+                    return;
+                }
+            }
+            
+            // Markera att svaret har kontrollerats och ändra knappen
+            answerChecked = true;
+            checkButton.textContent = 'Ny övning';
+            checkButton.focus();
+        }
+        
+        // Visa feedback
+        function showFeedback(isCorrect, message) {
+            const feedbackElement = document.getElementById('feedback');
+            feedbackElement.textContent = message;
+            
+            if (isCorrect) {
+                feedbackElement.className = 'feedback correct';
+            } else {
+                feedbackElement.className = 'feedback incorrect';
+            }
+        }
+        
+        // Lägg till eventlyssnare för Enter-tangenttryckning
+        document.getElementById('answer').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                if (answerChecked) {
+                    createNewExercise();
+                } else {
+                    checkAnswer();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
